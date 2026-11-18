@@ -1,0 +1,5 @@
+-- Auth service: create schema and enable extensions
+CREATE SCHEMA IF NOT EXISTS auth;
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
