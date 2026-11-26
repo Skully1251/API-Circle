@@ -9,6 +9,8 @@ const MIGRATIONS_DIR = __dirname;
 async function migrate() {
   const client = await pool.connect();
   try {
+    // Ensure the schema and migration tracking table exist
+    await client.query('CREATE SCHEMA IF NOT EXISTS users');
     await client.query(`
       CREATE TABLE IF NOT EXISTS users.schema_migrations (
         id          SERIAL PRIMARY KEY,

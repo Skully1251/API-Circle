@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Circle — Low-Level Design (LLD) Specification (PERN Stack)</title>
+  <link rel="stylesheet" href="./docs.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      securityLevel: 'loose',
+      fontFamily: 'Inter, sans-serif'
+    });
+  </script>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="header">
+    <a href="#" class="logo-area">
+      <div class="logo-icon">AC</div>
+      <div class="logo-title">API Circle</div>
+      <span class="logo-badge badge-lld">LLD Specification</span>
+    </a>
+    <nav class="nav-links">
+      <a href="./hld.html" class="nav-link">High-Level Design (HLD)</a>
+      <a href="./lld.html" class="nav-link active">Low-Level Design (LLD)</a>
+      <span class="badge badge-teal">PERN Stack Implementation</span>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-heading">Architecture & Model</div>
+      <ul class="sidebar-menu">
+        <li class="sidebar-item"><a href="#service-contracts" class="sidebar-link">1. Service-Level Design</a></li>
+        <li class="sidebar-item"><a href="#database-design" class="sidebar-link">2. Database Design & DDL</a></li>
+        <li class="sidebar-item"><a href="#module-diagrams" class="sidebar-link">3. Module & Middleware Design</a></li>
+        <li class="sidebar-item"><a href="#api-contracts" class="sidebar-link">4. RESTful API Contracts</a></li>
+      </ul>
+
+      <div class="sidebar-heading">Runtime & Pipelines</div>
+      <ul class="sidebar-menu">
+        <li class="sidebar-item"><a href="#sequence-diagrams" class="sidebar-link">5. Sequence Workflows</a></li>
+        <li class="sidebar-item"><a href="#gateway-internals" class="sidebar-link">6. Gateway Express Pipeline</a></li>
+        <li class="sidebar-item"><a href="#redis-design" class="sidebar-link">7. Redis Schema & Lua Scripts</a></li>
+        <li class="sidebar-item"><a href="#messaging-design" class="sidebar-link">8. Kafka & RabbitMQ Design</a></li>
+      </ul>
+
+      <div class="sidebar-heading">Security & Deployment</div>
+      <ul class="sidebar-menu">
+        <li class="sidebar-item"><a href="#security-resilience" class="sidebar-link">9. Security & Crypto Utils</a></li>
+        <li class="sidebar-item"><a href="#deployment-docker" class="sidebar-link">10. Docker & NGINX Topology</a></li>
+        <li class="sidebar-item"><a href="#project-structure" class="sidebar-link">11. Service Directory Layout</a></li>
+        <li class="sidebar-item"><a href="#cicd-pipelines" class="sidebar-link">12. CI/CD (GitHub & GitLab)</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <div class="container">
+        
+        <!-- Hero Section -->
+        <section class="doc-hero">
+          <div class="doc-meta">
+            <span class="doc-badge">IMPLEMENTATION BLUEPRINT</span>
+            <span class="doc-badge">PERN (POSTGRESQL + EXPRESS + REACT + NODE.JS)</span>
+            <span class="doc-badge">NGINX + REDIS LUA + KAFKA + RABBITMQ + DOCKER</span>
+          </div>
+          <h1 class="doc-title">API Circle — Low-Level Design (LLD)</h1>
+          <p class="doc-subtitle">
+            Implementation-ready technical blueprint. Covers the complete PostgreSQL DDL, Express.js middleware pipeline, atomic Redis Token Bucket Lua script, RabbitMQ RPC key validation, Kafka telemetry event streams, and CI/CD pipelines.
+          </p>
+        </section>
+
+        <!-- 1. Service-Level Design -->
+        <section id="service-contracts">
+          <h2>1. Service-Level Design & Component Boundaries</h2>
+          <p>
+            API Circle follows the <strong>Database-per-Service</strong> pattern using logical schemas in PostgreSQL. Each Node.js / Express microservice owns its domain data, enforces business rules, and communicates via REST or messaging:
+          </p>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Microservice</th>
+                  <th>Internal Modules</th>
+                  <th>Primary APIs &amp; Interfaces</th>
+                  <th>Storage &amp; Messaging</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>api-gateway</strong> (Port 3000)</td>
+                  <td>Express App, AuthMiddleware, RateLimitMiddleware, QuotaMiddleware, ProxyMiddleware, TelemetryMiddleware</td>
+                  <td>
+                    <ul>
+                      <li><code>/{api_slug}/{version}/**</code> (Consumer API invocations)</li>
+                      <li>Extracts <code>x-api-circle-key</code> or Bearer credentials</li>
+                      <li>Streams upstream response directly to client</li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li>Redis 7 (Metadata &amp; Lua state)</li>
+                      <li>Kafka Producer: <code>api.usage.events</code></li>
+                    </ul>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>auth-service</strong> (Port 3001)</td>
+                  <td>AuthRouter, UserController, RoleRepository, TokenService, PasswordHasher</td>
+                  <td>
+                    <ul>
+                      <li><code>POST /api/v1/auth/register</code>, <code>/login</code>, <code>/refresh</code></li>
+                      <li><code>POST /api/v1/auth/verify-email</code>, <code>/reset-password</code></li>
+                      <li>Issues signed RS256 / HS256 JWTs with RBAC claims</li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li>PostgreSQL (<code>auth</code> schema)</li>
+                      <li>Redis (Token blacklist: <code>auth:blacklist:*</code>)</li>
+                    </ul>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>user-service</strong> (Port 3002)</td>
+                  <td>ProfileController, OrgController, MemberRepository, RabbitMqClient</td>
+                  <td>
+                    <ul>
+                      <li><code>GET /users/me</code>, <code>PUT /users/me/profile</code></li>
+                      <li><code>POST /api/v1/organizations</code>, <code>/members</code></li>
+                      <li>Validates API keys via RabbitMQ RPC client (<code>api-key.validate</code>)</li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li>PostgreSQL (<code>users</code> schema)</li>
+                      <li>RabbitMQ RPC Producer: <code>api-key.validate</code></li>
+                    </ul>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>api-catalog-service</strong> (Port 3004)</td>
+                  <td>ApiController, VersionController, EndpointRegistry, CategoryService</td>
+                  <td>
+                    <ul>
+                      <li><code>GET/POST /api/v1/apis</code>, <code>/{id}/versions</code></li>
+                      <li><code>GET /api/v1/marketplace/categories</code></li>
+                      <li>Stores encrypted provider secrets (AES-256-GCM)</li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li>PostgreSQL (<code>catalog</code> schema)</li>
+                      <li>Redis (Route cache: <code>catalog:route:*</code>)</li>
+                    </ul>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>subscription-service</strong> (Port 3007)</td>
+                  <td>PlanController, SubscriptionManager, QuotaEvaluator</td>
+                  <td>
+                    <ul>
+                      <li><code>GET /api/v1/apis/{apiId}/plans</code></li>
+                      <li><code>POST /api/v1/subscriptions</code>, <code>/cancel</code></li>
+                      <li>Manages consumer tier quotas and billing cycles</li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li>PostgreSQL (<code>subscriptions</code> schema)</li>
+                      <li>Redis (Cache: <code>sub:consumer:*:api:*</code>)</li>
+                    </ul>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>api-key-service</strong> (Port 3008)</td>
+                  <td>KeyGenerator, KeyHasher, KeyValidatorConsumer, AuditLogger</td>
+                  <td>
+                    <ul>
+                      <li><code>POST /api-keys</code> (Issues dual-token keys)</li>
+                      <li>RabbitMQ Consumer on <code>api-key.validate</code> (RPC responder)</li>
+                      <li>Publishes immediate key revocations to Redis</li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li>PostgreSQL (<code>api_keys</code> schema)</li>
+                      <li>Redis (Key hash cache: <code>apikey:hash:*</code>)</li>
+                      <li>RabbitMQ RPC Consumer: <code>api-key.validate</code></li>
+                    </ul>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>notification-service</strong> (Port 3006)</td>
+                  <td>TemplateEngine, EmailTransporter, TaskConsumer, RetryManager</td>
+                  <td>
+                    <ul>
+                      <li><code>POST /api/v1/notifications</code></li>
+                      <li>Consumes RabbitMQ task queue <code>notification.dispatch</code></li>
+                      <li>Exponential backoff retry with Dead-Letter Exchange (DLX)</li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li>PostgreSQL (<code>notifications</code> schema)</li>
+                      <li>RabbitMQ Worker: <code>notification.dispatch</code></li>
+                    </ul>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>analytics-service</strong> (Port 3005)</td>
+                  <td>KafkaBatchConsumer, MetricAggregator, ReportController</td>
+                  <td>
+                    <ul>
+                      <li>Consumes Kafka topic <code>api.usage.events</code> in micro-batches</li>
+                      <li><code>GET /api/v1/analytics/apis/{apiId}/usage</code></li>
+                      <li>Computes latency percentiles (p50, p95, p99) and status error rates</li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li>PostgreSQL (<code>analytics</code>) / Redis rollups</li>
+                      <li>Kafka Consumer: <code>api.usage.events</code></li>
+                    </ul>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 2. Database Design & DDL -->
+        <section id="database-design">
+          <h2>2. Database Design &amp; Production PostgreSQL DDL</h2>
+          <p>
+            PostgreSQL 16 serves as the single source of truth. Each service operates in its own logical schema. Primary keys use <strong>UUIDv4</strong> (<code>uuid_generate_v4()</code>) and cross-service linkages use UUIDs without foreign keys to maintain autonomous deployability.
+          </p>
+
+          <div class="diagram-container">
+            <div class="mermaid">
+erDiagram
+    users_organizations ||--o{ users_organization_members : "contains"
+    users_organizations ||--o{ subscriptions_applications : "owns"
+    users_organizations ||--o{ catalog_apis : "publishes"
+
+    catalog_apis ||--|{ catalog_api_versions : "has"
+    catalog_api_versions ||--|{ catalog_api_endpoints : "exposes"
+    catalog_api_versions ||--o{ catalog_provider_configs : "routes_to"
+
+    catalog_apis ||--|{ subscriptions_plans : "offers"
+    subscriptions_applications ||--o{ subscriptions_consumer_subscriptions : "subscribes"
+    subscriptions_plans ||--o{ subscriptions_consumer_subscriptions : "governs"
+
+    subscriptions_applications ||--o{ api_keys_api_keys : "holds"
+    api_keys_api_keys ||--o{ api_keys_key_usage_log : "records"
+    
+    subscriptions_consumer_subscriptions ||--o{ subscriptions_usage_quotas : "meters"
+    subscriptions_consumer_subscriptions ||--o{ billing_invoices : "billed_under"
+            </div>
+            <div class="diagram-caption">Figure 2.1: PostgreSQL Logical Schemas Entity Relationship Diagram</div>
+          </div>
+
+          <h3>Production PostgreSQL SQL DDL</h3>
+          <div class="code-header">
+            <span>api-circle-init-schemas.sql</span>
+            <span>PostgreSQL 16</span>
+          </div>
+          <pre><code>-- ============================================================================
+-- API Circle Enterprise Schema DDL (PERN Stack)
+-- ============================================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE SCHEMA IF NOT EXISTS users;
+CREATE SCHEMA IF NOT EXISTS catalog;
+CREATE SCHEMA IF NOT EXISTS subscriptions;
+CREATE SCHEMA IF NOT EXISTS api_keys;
+CREATE SCHEMA IF NOT EXISTS notifications;
+CREATE SCHEMA IF NOT EXISTS billing;
+
+-- ----------------------------------------------------------------------------
+-- 1. AUTH SERVICE SCHEMA
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS auth.users (
+    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email                 VARCHAR(255) UNIQUE NOT NULL,
+    password_hash         VARCHAR(255) NOT NULL, -- bcrypt
+    is_email_verified     BOOLEAN NOT NULL DEFAULT false,
+    email_verified_at     TIMESTAMPTZ,
+    is_active             BOOLEAN NOT NULL DEFAULT true,
+    last_login_at         TIMESTAMPTZ,
+    last_login_ip         VARCHAR(45),
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until          TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_users_email ON auth.users(email) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS auth.roles (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name        VARCHAR(50) UNIQUE NOT NULL, -- 'admin', 'provider', 'consumer'
+    description VARCHAR(255),
+    is_system   BOOLEAN NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS auth.permissions (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name        VARCHAR(100) UNIQUE NOT NULL,
+    description VARCHAR(255),
+    resource    VARCHAR(100) NOT NULL,
+    action      VARCHAR(50) NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_perm_res_act UNIQUE (resource, action)
+);
+
+CREATE TABLE IF NOT EXISTS auth.role_permissions (
+    role_id       UUID NOT NULL REFERENCES auth.roles(id) ON DELETE CASCADE,
+    permission_id UUID NOT NULL REFERENCES auth.permissions(id) ON DELETE CASCADE,
+    PRIMARY KEY (role_id, permission_id)
+);
+
+CREATE TABLE IF NOT EXISTS auth.user_roles (
+    user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    role_id     UUID NOT NULL REFERENCES auth.roles(id) ON DELETE CASCADE,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    assigned_by UUID,
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
+    id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id        UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    token_hash     VARCHAR(255) UNIQUE NOT NULL,
+    family_id      UUID NOT NULL,
+    expires_at     TIMESTAMPTZ NOT NULL,
+    revoked_at     TIMESTAMPTZ,
+    revoked_reason VARCHAR(100),
+    user_agent     VARCHAR(500),
+    ip_address     VARCHAR(45),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rt_user ON auth.refresh_tokens(user_id) WHERE revoked_at IS NULL;
+
+-- ----------------------------------------------------------------------------
+-- 2. USER SERVICE SCHEMA
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users.organizations (
+    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name          VARCHAR(200) NOT NULL,
+    slug          VARCHAR(200) UNIQUE NOT NULL,
+    description   TEXT,
+    logo_url      VARCHAR(500),
+    website       VARCHAR(500),
+    owner_user_id UUID NOT NULL, -- references auth.users(id)
+    is_active     BOOLEAN NOT NULL DEFAULT true,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_org_slug ON users.organizations(slug) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS users.organization_members (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES users.organizations(id) ON DELETE CASCADE,
+    user_id         UUID NOT NULL, -- references auth.users(id)
+    role            VARCHAR(50) NOT NULL DEFAULT 'member', -- 'owner', 'admin', 'member'
+    invited_by      UUID,
+    joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at      TIMESTAMPTZ,
+    CONSTRAINT uq_org_user UNIQUE (organization_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS users.user_profiles (
+    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id      UUID UNIQUE NOT NULL, -- references auth.users(id)
+    first_name   VARCHAR(100),
+    last_name    VARCHAR(100),
+    display_name VARCHAR(150),
+    avatar_url   VARCHAR(500),
+    bio          TEXT,
+    phone        VARCHAR(20),
+    timezone     VARCHAR(50) NOT NULL DEFAULT 'UTC',
+    locale       VARCHAR(10) NOT NULL DEFAULT 'en',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at   TIMESTAMPTZ
+);
+
+-- ----------------------------------------------------------------------------
+-- 3. API CATALOG SERVICE SCHEMA
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS catalog.categories (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name        VARCHAR(100) UNIQUE NOT NULL,
+    slug        VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    icon        VARCHAR(100),
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS catalog.apis (
+    id                   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    provider_id          UUID NOT NULL, -- references auth.users(id) / provider org
+    name                 VARCHAR(200) NOT NULL,
+    slug                 VARCHAR(200) UNIQUE NOT NULL,
+    description          TEXT,
+    short_description    VARCHAR(500),
+    category_id          UUID REFERENCES catalog.categories(id) ON DELETE SET NULL,
+    logo_url             VARCHAR(500),
+    website_url          VARCHAR(500),
+    visibility           VARCHAR(20) NOT NULL DEFAULT 'private', -- 'public', 'private'
+    status               VARCHAR(20) NOT NULL DEFAULT 'draft',    -- 'draft', 'published', 'deprecated'
+    is_featured          BOOLEAN NOT NULL DEFAULT false,
+    published_at         TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at           TIMESTAMPTZ,
+    CONSTRAINT chk_api_visibility CHECK (visibility IN ('private', 'public', 'unlisted')),
+    CONSTRAINT chk_api_status CHECK (status IN ('draft', 'pending_review', 'published', 'deprecated', 'archived'))
+);
+CREATE INDEX IF NOT EXISTS idx_apis_slug ON catalog.apis(slug) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_apis_published ON catalog.apis(status, visibility) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS catalog.api_versions (
+    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    api_id        UUID NOT NULL REFERENCES catalog.apis(id) ON DELETE CASCADE,
+    version       VARCHAR(50) NOT NULL, -- 'v1', 'v2.0'
+    base_url      VARCHAR(500) NOT NULL,
+    status        VARCHAR(20) NOT NULL DEFAULT 'active', -- 'active', 'deprecated', 'retired'
+    is_default    BOOLEAN NOT NULL DEFAULT false,
+    changelog     TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_api_version UNIQUE (api_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS catalog.api_endpoints (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    api_version_id      UUID NOT NULL REFERENCES catalog.api_versions(id) ON DELETE CASCADE,
+    path                VARCHAR(500) NOT NULL, -- '/forecast'
+    method              VARCHAR(10) NOT NULL,  -- 'GET', 'POST', 'PUT', 'DELETE'
+    summary             VARCHAR(500),
+    description         TEXT,
+    request_body_schema JSONB,
+    response_schema     JSONB,
+    is_deprecated       BOOLEAN NOT NULL DEFAULT false,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_ep_ver_path_method UNIQUE (api_version_id, path, method)
+);
+
+CREATE TABLE IF NOT EXISTS catalog.provider_configs (
+    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    api_id                UUID UNIQUE NOT NULL REFERENCES catalog.apis(id) ON DELETE CASCADE,
+    auth_type             VARCHAR(50) NOT NULL DEFAULT 'none', -- 'api_key', 'oauth2', 'basic', 'bearer'
+    auth_config           JSONB NOT NULL DEFAULT '{}', -- AES-256-GCM encrypted provider secrets
+    rate_limit_per_second INTEGER,
+    timeout_ms            INTEGER NOT NULL DEFAULT 30000,
+    retry_count           INTEGER NOT NULL DEFAULT 0,
+    custom_headers        JSONB NOT NULL DEFAULT '{}',
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ----------------------------------------------------------------------------
+-- 4. SUBSCRIPTION SERVICE SCHEMA
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS subscriptions.plans (
+    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    api_id                UUID NOT NULL, -- references catalog.apis(id)
+    name                  VARCHAR(100) NOT NULL, -- 'Free', 'Basic', 'Pro'
+    slug                  VARCHAR(100) NOT NULL,
+    description           TEXT,
+    price_monthly         DECIMAL(10,2) NOT NULL DEFAULT 0,
+    currency              VARCHAR(3) NOT NULL DEFAULT 'USD',
+    request_limit_daily   INTEGER,
+    request_limit_monthly INTEGER,
+    rate_limit_per_second INTEGER,
+    rate_limit_per_minute INTEGER,
+    is_active             BOOLEAN NOT NULL DEFAULT true,
+    features              JSONB NOT NULL DEFAULT '[]',
+    sort_order            INTEGER NOT NULL DEFAULT 0,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at            TIMESTAMPTZ,
+    CONSTRAINT uq_plan_api_slug UNIQUE (api_id, slug)
+);
+
+CREATE TABLE IF NOT EXISTS subscriptions.consumer_subscriptions (
+    id                   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    consumer_id          UUID NOT NULL, -- references auth.users(id)
+    plan_id              UUID NOT NULL REFERENCES subscriptions.plans(id),
+    api_id               UUID NOT NULL, -- references catalog.apis(id)
+    status               VARCHAR(20) NOT NULL DEFAULT 'active', -- 'active', 'paused', 'cancelled'
+    billing_cycle        VARCHAR(20) NOT NULL DEFAULT 'monthly',
+    current_period_start TIMESTAMPTZ NOT NULL,
+    current_period_end   TIMESTAMPTZ NOT NULL,
+    cancelled_at         TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at           TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_consumer_plan_active 
+    ON subscriptions.consumer_subscriptions (consumer_id, plan_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS subscriptions.usage_quotas (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    subscription_id     UUID NOT NULL REFERENCES subscriptions.consumer_subscriptions(id) ON DELETE CASCADE,
+    period_start        TIMESTAMPTZ NOT NULL,
+    period_end          TIMESTAMPTZ NOT NULL,
+    request_count       INTEGER NOT NULL DEFAULT 0,
+    daily_request_count INTEGER NOT NULL DEFAULT 0,
+    daily_reset_at      TIMESTAMPTZ,
+    last_request_at     TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_quota_sub_period UNIQUE (subscription_id, period_start)
+);
+
+-- ----------------------------------------------------------------------------
+-- 5. API KEY SERVICE SCHEMA
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS api_keys.api_keys (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    consumer_id     UUID NOT NULL, -- references auth.users(id)
+    subscription_id UUID NOT NULL, -- references subscriptions.consumer_subscriptions(id)
+    api_id          UUID NOT NULL, -- references catalog.apis(id)
+    key_prefix      VARCHAR(12) NOT NULL, -- 'ac_7b9a1c2d' (shown in UI)
+    key_hash        VARCHAR(255) UNIQUE NOT NULL, -- SHA-256 of full key
+    name            VARCHAR(100),
+    status          VARCHAR(20) NOT NULL DEFAULT 'active', -- 'active', 'revoked', 'expired'
+    last_used_at    TIMESTAMPTZ,
+    last_used_ip    VARCHAR(45),
+    expires_at      TIMESTAMPTZ,
+    revoked_at      TIMESTAMPTZ,
+    revoked_reason  VARCHAR(255),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at      TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_ak_hash ON api_keys.api_keys(key_hash) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_ak_consumer ON api_keys.api_keys(consumer_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS api_keys.key_usage_log (
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    api_key_id       UUID NOT NULL REFERENCES api_keys.api_keys(id) ON DELETE CASCADE,
+    endpoint         VARCHAR(500),
+    method           VARCHAR(10),
+    status_code      INTEGER,
+    response_time_ms INTEGER,
+    ip_address       VARCHAR(45),
+    user_agent       VARCHAR(500),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_key_usage_created ON api_keys.key_usage_log(created_at);
+
+-- ----------------------------------------------------------------------------
+-- 6. NOTIFICATION SERVICE SCHEMA
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notifications.notification_templates (
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name             VARCHAR(100) UNIQUE NOT NULL,
+    channel          VARCHAR(20) NOT NULL DEFAULT 'email',
+    subject_template VARCHAR(500),
+    body_template    TEXT NOT NULL,
+    is_active        BOOLEAN NOT NULL DEFAULT true,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS notifications.notifications (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL, -- references auth.users(id)
+    template_id UUID REFERENCES notifications.notification_templates(id),
+    channel     VARCHAR(20) NOT NULL DEFAULT 'email',
+    type        VARCHAR(50) NOT NULL DEFAULT 'info',
+    title       VARCHAR(500) NOT NULL,
+    body        TEXT NOT NULL,
+    data        JSONB NOT NULL DEFAULT '{}',
+    is_read     BOOLEAN NOT NULL DEFAULT false,
+    read_at     TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notif_user_unread ON notifications.notifications(user_id, is_read);
+</code></pre>
+        </section>
+
+        <!-- 3. Module & Middleware Design -->
+        <section id="module-diagrams">
+          <h2>3. Node.js &amp; Express Module Architecture</h2>
+          <p>
+            The microservices share a consistent internal layering pattern: <strong>Routes &rarr; Middlewares &rarr; Controllers &rarr; Services &rarr; Repositories &rarr; PostgreSQL (pg.Pool) / Redis (ioredis)</strong>.
+          </p>
+
+          <div class="diagram-container">
+            <div class="mermaid">
+classDiagram
+    direction TB
+    
+    class ExpressApp {
+        +use(middleware)
+        +listen(port)
+    }
+
+    class CorrelationMiddleware {
+        +handle(req, res, next)
+    }
+
+    class ApiKeyAuthMiddleware {
+        -RedisClient redis
+        +handle(req, res, next)
+        -extractKey(req) String
+        -hashKey(rawKey) String
+    }
+
+    class RateLimitMiddleware {
+        -RedisClient redis
+        +handle(req, res, next)
+        -evalTokenBucketLua(key, rate, burst)
+    }
+
+    class QuotaMiddleware {
+        -RedisClient redis
+        +handle(req, res, next)
+        -checkMonthlyQuota(subId, limit)
+    }
+
+    class ProviderProxyMiddleware {
+        -HttpProxy proxy
+        +handle(req, res, next)
+        -injectProviderAuth(proxyReq, config)
+    }
+
+    class KafkaTelemetryMiddleware {
+        -KafkaProducer kafka
+        +handle(req, res, next)
+        -emitUsageEvent(event)
+    }
+
+    ExpressApp --> CorrelationMiddleware : 1. Assigns X-Correlation-ID
+    CorrelationMiddleware --> ApiKeyAuthMiddleware : 2. Validates SHA-256 Key in Redis
+    ApiKeyAuthMiddleware --> RateLimitMiddleware : 3. Executes Token Bucket Lua
+    RateLimitMiddleware --> QuotaMiddleware : 4. Evaluates Monthly Calls
+    QuotaMiddleware --> ProviderProxyMiddleware : 5. Forwards to Upstream API
+    ProviderProxyMiddleware --> KafkaTelemetryMiddleware : 6. Emits Async Usage Log
+            </div>
+            <div class="diagram-caption">Figure 3.1: Express API Gateway Middleware Processing Chain</div>
+          </div>
+        </section>
+
+        <!-- 4. RESTful API Contracts -->
+        <section id="api-contracts">
+          <h2>4. RESTful API Contracts</h2>
+
+          <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="card-header">
+              <span class="card-title"><code>POST /api-keys</code> (api-key-service)</span>
+              <span class="badge badge-green">Generate Dual-Token API Key</span>
+            </div>
+            <p>Generates a new API key. Plaintext is returned in response once; only the <code>ac_</code> prefix and SHA-256 hash are persisted.</p>
+            <div class="grid-2">
+              <div>
+                <h4>Request Payload:</h4>
+                <pre><code>{
+  "consumerId": "4a1d2e3f-9810-47b2-bc11-a09b8c7d6e5f",
+  "subscriptionId": "91a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+  "apiId": "1b9a2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+  "name": "Production E-Commerce Key"
+}</code></pre>
+              </div>
+              <div>
+                <h4>201 Created Response:</h4>
+                <pre><code>{
+  "apiKey": "ac_7b9a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f",
+  "keyPrefix": "ac_7b9a1c2d",
+  "name": "Production E-Commerce Key",
+  "status": "active",
+  "createdAt": "2026-11-24T14:35:00Z",
+  "warning": "Save this key now. Plaintext will not be shown again."
+}</code></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="card-header">
+              <span class="card-title"><code>GET /users/me</code> (user-service)</span>
+              <span class="badge badge-blue">Inspect Current User Context</span>
+            </div>
+            <p>Protected endpoint that validates the client's API key via RabbitMQ RPC call to <code>api-key-service</code>.</p>
+            <div class="grid-2">
+              <div>
+                <h4>Request Headers:</h4>
+                <pre><code>GET /users/me HTTP/1.1
+Host: api.apicircle.com
+x-api-key: ac_7b9a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f</code></pre>
+              </div>
+              <div>
+                <h4>200 OK Response:</h4>
+                <pre><code>{
+  "user": {
+    "id": "4a1d2e3f-9810-47b2-bc11-a09b8c7d6e5f",
+    "email": "developer@acme.com",
+    "name": "Acme Engineering"
+  },
+  "authenticatedBy": "api-key-service via RabbitMQ"
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. Sequence Workflows -->
+        <section id="sequence-diagrams">
+          <h2>5. Core Architectural Sequence Workflows</h2>
+
+          <h3>5.1 RabbitMQ Inter-Service RPC API Key Validation</h3>
+          <p>
+            Demonstrates the decoupled, resilient RPC validation pattern implemented between <code>user-service</code> and <code>api-key-service</code> via RabbitMQ:
+          </p>
+
+          <div class="diagram-container">
+            <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Client as Consumer App
+    participant US as user-service (Port 3002)
+    participant RMQ as RabbitMQ Broker (Queue: api-key.validate)
+    participant KS as api-key-service (Port 3008)
+    participant Redis as Redis (apikey:hash:*)
+
+    Client->>US: GET /users/me (Header: x-api-key)
+    US->>US: Generate correlationId (UUIDv4) + create ephemeral replyQueue
+    US->>RMQ: sendToQueue('api-key.validate', { apiKey }, { replyTo, correlationId })
+    RMQ->>KS: Consume 'api-key.validate' message
+    KS->>KS: SHA-256(apiKey)
+    KS->>Redis: GET apikey:hash:{hash}
+    Redis-->>KS: Cached User Context ({ id, email, name })
+    KS->>RMQ: sendToQueue(replyTo, { valid: true, user }, { correlationId })
+    RMQ-->>US: Consume response on ephemeral replyQueue
+    US->>US: Match correlationId and resolve Promise
+    US-->>Client: 200 OK ({ user, authenticatedBy: 'api-key-service via RabbitMQ' })
+            </div>
+            <div class="diagram-caption">Figure 5.1: RabbitMQ Request-Reply RPC Sequence for Key Validation</div>
+          </div>
+
+          <h3>5.2 Gateway Request Proxying &amp; Kafka Telemetry Flow</h3>
+          <div class="diagram-container">
+            <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Consumer as API Consumer
+    participant Nginx as Edge NGINX
+    participant GW as api-gateway (Express)
+    participant Redis as Redis 7 (Token Bucket)
+    participant Provider as Provider Upstream
+    participant Kafka as Apache Kafka (api.usage.events)
+
+    Consumer->>Nginx: GET /weather/v1/forecast (x-api-circle-key: ac_...)
+    Nginx->>GW: Reverse Proxy Request
+    GW->>Redis: EVALSHA token_bucket.lua (ratelimit:tb:{subId})
+    Redis-->>GW: [allowed=1, remaining=49, reset=1, quota_used=120]
+    GW->>Provider: Forward Request + Injected Provider Auth Header
+    Provider-->>GW: 200 OK + Forecast Payload
+    GW-->>Consumer: 200 OK (X-RateLimit-Remaining: 49)
+    GW-)Kafka: producer.send({ topic: 'api.usage.events', messages: [ { key: appId, value: JSON } ] })
+            </div>
+            <div class="diagram-caption">Figure 5.2: Gateway Proxying &amp; Asynchronous Kafka Usage Logging</div>
+          </div>
+        </section>
+
+        <!-- 6. Gateway Express Pipeline -->
+        <section id="gateway-internals">
+          <h2>6. Gateway Express Pipeline &amp; Proxy Implementation</h2>
+          <p>
+            The dedicated <code>api-gateway</code> service is built on Node.js 22 and Express 4.x. It executes a lean middleware stack designed for minimal overhead:
+          </p>
+
+          <div class="code-header">
+            <span>gateway-server.js</span>
+            <span>Node.js / Express</span>
+          </div>
+          <pre><code>'use strict';
+
+const express = require('express');
+const crypto = require('crypto');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+const Redis = require('ioredis');
+const { Kafka } = require('kafkajs');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
+
+// Kafka Producer Setup
+const kafka = new Kafka({ clientId: 'api-gateway', brokers: (process.env.KAFKA_BROKERS || 'kafka:9092').split(',') });
+const producer = kafka.producer();
+producer.connect().catch(err => console.error('Kafka connection error:', err));
+
+// 1. Correlation ID Middleware
+app.use((req, res, next) => {
+  req.correlationId = req.get('x-correlation-id') || crypto.randomUUID();
+  res.set('x-correlation-id', req.correlationId);
+  req.startTime = Date.now();
+  next();
+});
+
+// 2. Fast-Path API Key Authentication Middleware
+app.use(async (req, res, next) => {
+  const rawKey = req.get('x-api-circle-key') || req.get('x-api-key');
+  if (!rawKey) {
+    return res.status(401).json({ error: 'API key is required in x-api-circle-key header' });
+  }
+
+  const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+  const cachedMeta = await redis.get(`apikey:hash:${keyHash}`);
+  
+  if (!cachedMeta) {
+    return res.status(401).json({ error: 'Invalid or revoked API key' });
+  }
+
+  req.consumer = JSON.parse(cachedMeta); // { id, consumerId, subscriptionId, apiId, plan }
+  next();
+});
+
+// 3. Distributed Redis Rate Limiting Middleware
+app.use(async (req, res, next) => {
+  const subId = req.consumer.subscriptionId;
+  const rate = req.consumer.plan.rateLimitPerSec || 20;
+  const burst = req.consumer.plan.rateLimitBurst || 40;
+  const now = Math.floor(Date.now() / 1000);
+
+  try {
+    // Call preloaded Token Bucket Lua Script
+    const result = await redis.evalsha(req.app.locals.tokenBucketSha, 2, `ratelimit:tb:${subId}`, `quota:monthly:${subId}`, rate, burst, now, 1, req.consumer.plan.monthlyQuota || 0);
+    const [allowed, remaining, resetAfter, quotaUsed] = result;
+
+    res.set('X-RateLimit-Limit', rate);
+    res.set('X-RateLimit-Remaining', remaining);
+    res.set('X-RateLimit-Reset', resetAfter);
+
+    if (allowed === -1) {
+      return res.status(403).json({ error: 'Monthly subscription quota exhausted' });
+    }
+    if (allowed === 0) {
+      res.set('Retry-After', resetAfter);
+      return res.status(429).json({ error: 'Rate limit exceeded. Please throttle requests.' });
+    }
+
+    next();
+  } catch (err) {
+    console.error('Rate limit error:', err.message);
+    next(); // Fail open if Redis rate limit check errors
+  }
+});
+
+// 4. Dynamic Provider Reverse Proxy
+app.use('/:apiSlug/:version', (req, res, next) => {
+  const { apiSlug, version } = req.params;
+  
+  // Resolve target route from Redis cache
+  redis.get(`catalog:route:${apiSlug}:${version}`).then(routeJson => {
+    if (!routeJson) {
+      return res.status(404).json({ error: `API route /${apiSlug}/${version} not found or inactive` });
+    }
+    const route = JSON.parse(routeJson); // { targetBaseUrl, authType, secret }
+
+    createProxyMiddleware({
+      target: route.targetBaseUrl,
+      changeOrigin: true,
+      pathRewrite: { [`^/${apiSlug}/${version}`]: '' },
+      onProxyReq: (proxyReq) => {
+        // Inject Provider Upstream Credentials
+        if (route.authType === 'bearer') {
+          proxyReq.setHeader('Authorization', `Bearer ${route.secret}`);
+        } else if (route.authType === 'api_key') {
+          proxyReq.setHeader('x-provider-key', route.secret);
+        }
+      },
+      onProxyRes: () => {
+        // Asynchronously emit usage metric to Kafka
+        const duration = Date.now() - req.startTime;
+        producer.send({
+          topic: 'api.usage.events',
+          messages: [{
+            key: req.consumer.consumerId,
+            value: JSON.stringify({
+              correlationId: req.correlationId,
+              consumerId: req.consumer.consumerId,
+              subscriptionId: req.consumer.subscriptionId,
+              apiSlug,
+              version,
+              statusCode: res.statusCode,
+              durationMs: duration,
+              timestamp: new Date().toISOString()
+            })
+          }]
+        }).catch(e => console.error('Kafka emit error:', e.message));
+      }
+    })(req, res, next);
+  }).catch(next);
+});
+
+app.listen(PORT, () => console.log(`API Circle Gateway listening on port ${PORT}`));
+</code></pre>
+        </section>
+
+        <!-- 7. Redis Schema & Lua Scripts -->
+        <section id="redis-design">
+          <h2>7. Redis Data Structures &amp; Token Bucket Lua Script</h2>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Key Pattern</th>
+                  <th>Data Type</th>
+                  <th>TTL</th>
+                  <th>Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>apikey:hash:{sha256}</code></td>
+                  <td>String (JSON)</td>
+                  <td>300s (5 min)</td>
+                  <td>Hot cache of consumer ID, subscription ID, plan rates, and active status.</td>
+                </tr>
+                <tr>
+                  <td><code>catalog:route:{slug}:{ver}</code></td>
+                  <td>String (JSON)</td>
+                  <td>600s (10 min)</td>
+                  <td>Provider backend URL, auth type, and decrypted upstream credentials.</td>
+                </tr>
+                <tr>
+                  <td><code>ratelimit:tb:{subId}</code></td>
+                  <td>Hash</td>
+                  <td>60s</td>
+                  <td>Token Bucket state: fields <code>tokens</code> (float) and <code>last_updated</code> (seconds).</td>
+                </tr>
+                <tr>
+                  <td><code>quota:monthly:{subId}</code></td>
+                  <td>String (Integer)</td>
+                  <td>35 days</td>
+                  <td>Atomic monthly request counter for quota checks.</td>
+                </tr>
+                <tr>
+                  <td><code>auth:blacklist:{tokenHash}</code></td>
+                  <td>String</td>
+                  <td>JWT lifetime</td>
+                  <td>Blacklisted refresh tokens and revoked access tokens.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production Atomic Token Bucket Lua Script</h3>
+          <div class="code-header">
+            <span>token_bucket.lua</span>
+            <span>Redis Lua</span>
+          </div>
+          <pre><code>-- KEYS[1] = ratelimit:tb:{subscriptionId}
+-- KEYS[2] = quota:monthly:{subscriptionId}
+-- ARGV[1] = rate (tokens/sec)
+-- ARGV[2] = capacity (max burst tokens)
+-- ARGV[3] = now (epoch seconds)
+-- ARGV[4] = requested (usually 1)
+-- ARGV[5] = quota_limit (0 = unlimited)
+
+local rate_key    = KEYS[1]
+local quota_key   = KEYS[2]
+local rate        = tonumber(ARGV[1])
+local capacity    = tonumber(ARGV[2])
+local now         = tonumber(ARGV[3])
+local requested   = tonumber(ARGV[4])
+local quota_limit = tonumber(ARGV[5])
+
+-- 1. Check Monthly Quota
+if quota_limit > 0 then
+    local current_quota = tonumber(redis.call('get', quota_key) or "0")
+    if current_quota + requested > quota_limit then
+        return {-1, 0, 0, current_quota} -- Quota Exceeded Code
+    end
+end
+
+-- 2. Fetch or initialize Token Bucket
+local data = redis.call('hmget', rate_key, 'tokens', 'last_updated')
+local tokens = tonumber(data[1])
+local last_updated = tonumber(data[2])
+
+if tokens == nil then
+    tokens = capacity
+    last_updated = now
+else
+    local delta = math.max(0, now - last_updated)
+    tokens = math.min(capacity, tokens + delta * rate)
+    last_updated = now
+end
+
+-- 3. Evaluate Rate Limit
+if tokens >= requested then
+    tokens = tokens - requested
+    redis.call('hmset', rate_key, 'tokens', tokens, 'last_updated', last_updated)
+    redis.call('expire', rate_key, 60)
+    
+    local quota_used = redis.call('incrby', quota_key, requested)
+    redis.call('expire', quota_key, 3024000) -- 35 days TTL
+    
+    return {1, math.floor(tokens), math.ceil((capacity - tokens) / rate), quota_used}
+else
+    local retry_after = math.ceil((requested - tokens) / rate)
+    return {0, 0, retry_after, 0}
+end
+</code></pre>
+        </section>
+
+        <!-- 8. Messaging Design -->
+        <section id="messaging-design">
+          <h2>8. Messaging Architecture: Kafka &amp; RabbitMQ Implementation</h2>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>RabbitMQ RPC Validation Pattern (Node.js)</h3>
+              <p style="font-size: 0.88rem;">
+                Implemented using <code>amqplib</code>. When a service (such as <code>user-service</code>) needs to validate an API key, it sends an RPC request with a correlation UUID:
+              </p>
+              <pre><code>// RabbitMQ Client RPC Request
+const correlationId = crypto.randomUUID();
+rabbitChannel.sendToQueue('api-key.validate', 
+  Buffer.from(JSON.stringify({ apiKey })), 
+  { correlationId, replyTo: replyQueue.queue }
+);</code></pre>
+            </div>
+            <div class="card">
+              <h3>Kafka High-Throughput Stream Ingestion</h3>
+              <p style="font-size: 0.88rem;">
+                Implemented using <code>kafkajs</code>. The Gateway publishes fire-and-forget telemetry events partitioned by <code>consumerId</code> to maintain ordering:
+              </p>
+              <pre><code>// Kafka Telemetry Producer
+await producer.send({
+  topic: 'api.usage.events',
+  messages: [{
+    key: consumerId,
+    value: JSON.stringify(telemetryPayload)
+  }]
+});</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- 9. Security & Resilience -->
+        <section id="security-resilience">
+          <h2>9. Security, Hashing &amp; Cryptographic Utilities</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h3>SHA-256 API Key Verification</h3>
+              <p style="font-size: 0.88rem;">Plaintext keys are hashed before lookup or persistence:</p>
+              <pre><code>const crypto = require('crypto');
+
+function hashApiKey(rawKey) {
+  return crypto.createHash('sha256')
+               .update(rawKey)
+               .digest('hex');
+}</code></pre>
+            </div>
+            <div class="card">
+              <h3>AES-256-GCM Provider Secret Encryption</h3>
+              <p style="font-size: 0.88rem;">Protects upstream provider credentials stored in PostgreSQL:</p>
+              <pre><code>function encryptSecret(plaintext, key) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, encrypted]).toString('base64');
+}</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- 10. Deployment Topology -->
+        <section id="deployment-docker">
+          <h2>10. Deployment Topology: NGINX &amp; Docker Compose</h2>
+          <div class="code-header">
+            <span>docker-compose.yaml</span>
+            <span>Docker Specification</span>
+          </div>
+          <pre><code>services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api-gateway
+    networks:
+      - api-network
+
+  api-gateway:
+    build: ./services/api-gateway
+    expose:
+      - "3000"
+    environment:
+      PORT: 3000
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      kafka:    { condition: service_started }
+    networks:
+      - api-network
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: api_circle
+      POSTGRES_USER: api_circle
+      POSTGRES_PASSWORD: api_circle_dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U api_circle -d api_circle"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - api-network
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - api-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - api-network
+
+  kafka:
+    image: bitnami/kafka:3.8
+    environment:
+      KAFKA_CFG_NODE_ID: 1
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_KRAFT_CLUSTER_ID: api-circle-kafka-cluster
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    networks:
+      - api-network
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  api-network:
+    driver: bridge
+</code></pre>
+        </section>
+
+        <!-- 11. Service Directory Layout -->
+        <section id="project-structure">
+          <h2>11. PERN Microservice Directory Layout</h2>
+          <p>Standardized directory layout followed across each Node.js / Express microservice in <code>services/</code>:</p>
+          <pre><code>services/
+├── api-gateway/                      # Express Data Plane Gateway
+│   ├── server.js                     # Gateway entry point & route registration
+│   ├── package.json                  # express, http-proxy-middleware, ioredis, kafkajs
+│   └── src/
+│       ├── config/                   # redis.js, kafka.js
+│       └── middlewares/              # auth.js, rateLimiter.js, proxy.js, telemetry.js
+├── auth-service/                     # Identity & Authentication
+│   ├── server.js
+│   └── src/
+│       ├── config/                   # db.js (pg.Pool), redis.js (ioredis)
+│       ├── migrations/               # 001_create_auth_schema.sql, migrate.js
+│       ├── models/                   # User.js, Role.js, Permission.js, RefreshToken.js
+│       ├── repositories/             # userRepository.js
+│       ├── routes/                   # authRoutes.js
+│       └── seeds/                    # seed_roles.js
+├── user-service/                     # Users & Organizations
+│   ├── server.js
+│   └── src/
+│       ├── config/                   # db.js, redis.js
+│       ├── models/                   # UserProfile.js, Organization.js, OrganizationMember.js
+│       └── utils/                    # rabbitmq.js (RPC validateApiKey client)
+├── api-catalog-service/              # API Marketplace Catalog
+│   ├── server.js
+│   └── src/
+│       ├── config/                   # db.js, redis.js
+│       ├── models/                   # Api.js, ApiVersion.js, ApiEndpoint.js, Category.js
+│       └── seeds/                    # seed_categories.js
+├── subscription-service/             # Plans & Subscriptions
+│   ├── server.js
+│   └── src/
+│       ├── config/                   # db.js, redis.js
+│       ├── models/                   # Plan.js, ConsumerSubscription.js, UsageQuota.js
+│       └── seeds/                    # seed_plans.js
+├── api-key-service/                  # API Credentials Management
+│   ├── server.js                     # Express app + RabbitMQ consumer (api-key.validate)
+│   └── src/
+│       ├── config/                   # db.js, redis.js
+│       └── models/                   # ApiKey.js, KeyUsageLog.js
+└── notification-service/             # Notifications & Email Tasks
+    ├── server.js
+    └── src/
+        ├── config/                   # db.js, redis.js
+        └── models/                   # Notification.js, NotificationTemplate.js
+</code></pre>
+        </section>
+
+        <!-- 12. CI/CD Pipelines -->
+        <section id="cicd-pipelines">
+          <h2>12. CI/CD Pipeline Specifications (GitHub Actions &amp; GitLab CI)</h2>
+
+          <h3>12.1 GitHub Actions Workflow</h3>
+          <div class="code-header">
+            <span>.github/workflows/ci.yml</span>
+            <span>GitHub Actions</span>
+          </div>
+          <pre><code>name: API Circle CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: api_circle
+          POSTGRES_USER: api_circle
+          POSTGRES_PASSWORD: api_circle_dev
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 5
+
+    strategy:
+      matrix:
+        service: [auth-service, user-service, api-catalog-service, subscription-service, api-key-service, notification-service, api-gateway]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'services/${{ matrix.service }}/package.json'
+
+      - name: Install Dependencies & Run Tests
+        working-directory: services/${{ matrix.service }}
+        run: |
+          npm ci
+          npm test --if-present
+
+  build-and-push:
+    needs: test-and-lint
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and Push Gateway Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/api-gateway
+          push: true
+          tags: apicircle/api-gateway:${{ github.sha }},apicircle/api-gateway:latest
+</code></pre>
+
+          <h3>12.2 GitLab CI Pipeline</h3>
+          <div class="code-header">
+            <span>.gitlab-ci.yml</span>
+            <span>GitLab CI</span>
+          </div>
+          <pre><code>image: node:22-alpine
+
+stages:
+  - test
+  - build
+  - deploy
+
+services:
+  - postgres:16-alpine
+  - redis:7-alpine
+
+variables:
+  POSTGRES_DB: api_circle
+  POSTGRES_USER: api_circle
+  POSTGRES_PASSWORD: api_circle_dev
+  DATABASE_URL: postgresql://api_circle:api_circle_dev@postgres:5432/api_circle
+  REDIS_URL: redis://redis:6379
+
+unit_tests:
+  stage: test
+  script:
+    - for s in services/*; do if [ -d "$s" ]; then cd "$s" && npm ci && npm test --if-present && cd ../..; fi; done
+
+docker_build:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  only:
+    - main
+  script:
+    - docker compose build
+    - docker compose push
+</code></pre>
+
+          <div style="margin-top: 3rem; text-align: center;">
+            <p style="color: var(--text-muted); font-size: 0.95rem;">
+              You have completed reviewing the PERN Stack Low-Level Design. Return to the High-Level Design document for overarching system principles and actor flows.
+            </p>
+            <a href="./hld.html" class="nav-link active" style="display: inline-flex; padding: 0.75rem 1.75rem; font-size: 1rem; margin-top: 0.5rem;">
+              &larr; Back to High-Level Design (HLD)
+            </a>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <a href="#" class="back-to-top" title="Back to top">&uarr;</a>
+</body>
+</html>

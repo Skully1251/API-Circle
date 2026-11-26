@@ -3,6 +3,7 @@
 const Redis = require('ioredis');
 
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+  lazyConnect: process.env.NODE_ENV === 'test',
   maxRetriesPerRequest: 3,
   retryStrategy(times) {
     const delay = Math.min(times * 200, 5000);

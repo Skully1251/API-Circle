@@ -45,6 +45,32 @@ const AccountSettings = {
     );
     return rows[0] || null;
   },
+  async upsert(userId, fields) {
+    const allowed = ['email_notifications', 'marketing_emails', 'two_factor_enabled', 'theme'];
+    const cols = ['user_id'];
+    const placeholders = ['$1'];
+    const updates = ['updated_at = NOW()'];
+    const values = [userId];
+    let idx = 2;
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (allowed.includes(key) && value !== undefined) {
+        cols.push(key);
+        placeholders.push(`$${idx++}`);
+        values.push(value);
+        updates.push(`${key} = EXCLUDED.${key}`);
+      }
+    }
+
+    const { rows } = await query(
+      `INSERT INTO users.account_settings (${cols.join(', ')})
+       VALUES (${placeholders.join(', ')})
+       ON CONFLICT (user_id) DO UPDATE SET ${updates.join(', ')}
+       RETURNING *`,
+      values
+    );
+    return rows[0];
+  },
 };
 
 module.exports = AccountSettings;

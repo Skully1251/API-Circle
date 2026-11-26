@@ -7,7 +7,13 @@ const OrganizationMember = {
     const { rows } = await query(
       `INSERT INTO users.organization_members (organization_id, user_id, role, invited_by)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (organization_id, user_id) DO NOTHING
+       ON CONFLICT (organization_id, user_id) DO UPDATE
+         SET role = EXCLUDED.role,
+             invited_by = EXCLUDED.invited_by,
+             deleted_at = NULL,
+             joined_at = NOW(),
+             updated_at = NOW()
+         WHERE users.organization_members.deleted_at IS NOT NULL
        RETURNING *`,
       [organizationId, userId, role, invitedBy]
     );
