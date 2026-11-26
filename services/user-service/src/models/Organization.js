@@ -1,16 +1,44 @@
 'use strict';
 
-const { query } = require('../config/db');
+const { query, getClient } = require('../config/db');
 
 const Organization = {
-  async create({ name, slug, description, ownerUserId }) {
+  async create({ name, slug, description = null, logoUrl = null, website = null, ownerUserId }) {
     const { rows } = await query(
-      `INSERT INTO users.organizations (name, slug, description, owner_user_id)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users.organizations (name, slug, description, logo_url, website, owner_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name, slug, description, ownerUserId]
+      [name, slug, description, logoUrl, website, ownerUserId]
     );
     return rows[0];
+  },
+
+  async createWithOwner({ name, slug, description = null, logoUrl = null, website = null, ownerUserId }) {
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      const { rows: orgRows } = await client.query(
+        `INSERT INTO users.organizations (name, slug, description, logo_url, website, owner_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [name, slug, description, logoUrl, website, ownerUserId]
+      );
+      const org = orgRows[0];
+
+      await client.query(
+        `INSERT INTO users.organization_members (organization_id, user_id, role, invited_by)
+         VALUES ($1, $2, 'owner', $2)`,
+        [org.id, ownerUserId]
+      );
+
+      await client.query('COMMIT');
+      return org;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   async findById(id) {

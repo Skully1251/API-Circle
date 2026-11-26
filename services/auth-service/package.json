@@ -1,11 +1,22 @@
 {
   "name": "auth-service",
   "version": "1.0.0",
-  "description": "",
+  "description": "API Circle Authentication and Identity Service",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "test": "node --test tests/*.test.js",
+    "start": "node server.js",
+    "migrate": "node src/migrations/migrate.js",
+    "seed": "node src/seeds/seed_roles.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1"
   },
   "keywords": [],
   "author": "",

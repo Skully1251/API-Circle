@@ -1,9 +1,13 @@
+'use strict';
+
 const amqp = require('amqplib');
 const crypto = require('crypto');
 const { EventEmitter, once } = require('events');
+const config = require('../config/env');
+const logger = require('./logger');
 
-const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672';
 const VALIDATE_API_KEY_QUEUE = 'api-key.validate';
+const RPC_TIMEOUT_MS = Number(process.env.RABBITMQ_RPC_TIMEOUT_MS || 5000);
 
 let connection;
 let channel;
@@ -14,32 +18,47 @@ async function getChannel() {
     return channel;
   }
 
-  connection = await amqp.connect(RABBITMQ_URL);
+  connection = await amqp.connect(config.rabbitmqUrl);
   connection.on('close', () => {
     connection = undefined;
     channel = undefined;
   });
   connection.on('error', (error) => {
-    console.error('RabbitMQ connection error:', error.message);
+    logger.error('RabbitMQ connection error', { errMessage: error.message });
   });
+
   channel = await connection.createChannel();
+  channel.on('close', () => {
+    channel = undefined;
+  });
+
   const replyQueue = await channel.assertQueue('', { exclusive: true });
+  await channel.consume(
+    replyQueue.queue,
+    (message) => {
+      if (!message) return;
 
-  await channel.consume(replyQueue.queue, (message) => {
-    if (!message) return;
-
-    const response = JSON.parse(message.content.toString());
-    responseEvents.emit(message.properties.correlationId, response);
-  }, { noAck: true });
+      try {
+        const response = JSON.parse(message.content.toString());
+        responseEvents.emit(message.properties.correlationId, response);
+      } catch (err) {
+        logger.warn('Failed to parse RabbitMQ RPC reply', { errMessage: err.message });
+      }
+    },
+    { noAck: true }
+  );
 
   channel.replyQueue = replyQueue.queue;
   return channel;
 }
 
+/**
+ * Validate an API key synchronously over RabbitMQ RPC (`api-key.validate`).
+ */
 async function validateApiKey(apiKey) {
   const rabbitChannel = await getChannel();
   const correlationId = crypto.randomUUID();
-  const timeout = AbortSignal.timeout(5000);
+  const timeout = AbortSignal.timeout(RPC_TIMEOUT_MS);
 
   rabbitChannel.sendToQueue(
     VALIDATE_API_KEY_QUEUE,
@@ -47,13 +66,13 @@ async function validateApiKey(apiKey) {
     {
       correlationId,
       replyTo: rabbitChannel.replyQueue,
-      persistent: true
+      persistent: true,
     }
   );
 
   try {
     const [response] = await once(responseEvents, correlationId, {
-      signal: timeout
+      signal: timeout,
     });
     return response;
   } catch (error) {
@@ -64,4 +83,22 @@ async function validateApiKey(apiKey) {
   }
 }
 
-module.exports = { validateApiKey };
+function isConnected() {
+  return Boolean(connection && channel);
+}
+
+async function closeConnection() {
+  try {
+    if (channel) await channel.close();
+    if (connection) await connection.close();
+  } finally {
+    channel = undefined;
+    connection = undefined;
+  }
+}
+
+module.exports = {
+  validateApiKey,
+  isConnected,
+  closeConnection,
+};

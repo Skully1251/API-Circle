@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Circle — High-Level Design (HLD) Specification (PERN Stack)</title>
+  <link rel="stylesheet" href="./docs.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      securityLevel: 'loose',
+      fontFamily: 'Inter, sans-serif'
+    });
+  </script>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="header">
+    <a href="#" class="logo-area">
+      <div class="logo-icon">AC</div>
+      <div class="logo-title">API Circle</div>
+      <span class="logo-badge badge-hld">HLD Specification</span>
+    </a>
+    <nav class="nav-links">
+      <a href="./hld.html" class="nav-link active">High-Level Design (HLD)</a>
+      <a href="./lld.html" class="nav-link">Low-Level Design (LLD)</a>
+      <span class="badge badge-teal">PERN Stack Architecture</span>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-heading">System Overview</div>
+      <ul class="sidebar-menu">
+        <li class="sidebar-item"><a href="#executive-summary" class="sidebar-link">1. Executive Summary</a></li>
+        <li class="sidebar-item"><a href="#primary-actors" class="sidebar-link">2. Actors & Use Cases</a></li>
+        <li class="sidebar-item"><a href="#system-architecture" class="sidebar-link">3. Architecture & Gateway Layering</a></li>
+      </ul>
+
+      <div class="sidebar-heading">Tech Stack & Decomposition</div>
+      <ul class="sidebar-menu">
+        <li class="sidebar-item"><a href="#tech-stack" class="sidebar-link">4. Technology Stack (PERN)</a></li>
+        <li class="sidebar-item"><a href="#service-decomposition" class="sidebar-link">5. Microservices Decomposition</a></li>
+        <li class="sidebar-item"><a href="#database-caching" class="sidebar-link">6. Database & Redis Strategy</a></li>
+        <li class="sidebar-item"><a href="#messaging-architecture" class="sidebar-link">7. Kafka & RabbitMQ Messaging</a></li>
+      </ul>
+
+      <div class="sidebar-heading">Execution & Operations</div>
+      <ul class="sidebar-menu">
+        <li class="sidebar-item"><a href="#core-request-flow" class="sidebar-link">8. End-to-End Request Pipeline</a></li>
+        <li class="sidebar-item"><a href="#security-architecture" class="sidebar-link">9. Security Architecture</a></li>
+        <li class="sidebar-item"><a href="#deployment-cicd" class="sidebar-link">10. Docker & CI/CD Pipeline</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <div class="container">
+        
+        <!-- Hero Section -->
+        <section class="doc-hero">
+          <div class="doc-meta">
+            <span class="doc-badge">ENTERPRISE SYSTEM ARCHITECTURE</span>
+            <span class="doc-badge">PERN (POSTGRESQL + EXPRESS + REACT + NODE.JS)</span>
+            <span class="doc-badge">NGINX + KAFKA + RABBITMQ + REDIS</span>
+          </div>
+          <h1 class="doc-title">API Circle — High-Level Design (HLD)</h1>
+          <p class="doc-subtitle">
+            Architectural blueprint for a centralized API management and distribution platform. Built on the PERN stack (PostgreSQL, Express, React, Node.js) with NGINX edge routing, a dedicated Node.js application gateway, dual messaging with Kafka &amp; RabbitMQ, and Redis caching.
+          </p>
+        </section>
+
+        <!-- 1. Executive Summary -->
+        <section id="executive-summary">
+          <h2>1. Executive Summary & Problem Statement</h2>
+          <p>
+            Modern digital businesses consume dozens of external APIs while simultaneously seeking to monetize their own digital capabilities. However, integrating directly with fragmented providers introduces severe operational overhead: scattered billing agreements, uncoordinated rate limits, disparate credential formats, and lack of unified security audits.
+          </p>
+          <p>
+            <strong>API Circle</strong> acts as an intelligent intermediary and marketplace between <strong>API Providers</strong> and <strong>API Consumers</strong>. Built using the <strong>PERN stack (PostgreSQL, Express.js, React, Node.js)</strong>, the platform delivers:
+          </p>
+          <div class="grid-3">
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Centralized Marketplace</span>
+                <span class="badge badge-blue">React UI + REST</span>
+              </div>
+              <p>Self-service portal where consumers discover APIs, inspect interactive documentation, create applications, subscribe to tiered plans, and issue API credentials.</p>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Dual Gateway Architecture</span>
+                <span class="badge badge-teal">NGINX + Node Gateway</span>
+              </div>
+              <p>NGINX handles edge TLS, basic rate limiting, and HTTP load balancing, forwarding traffic to our internal Express API Gateway for token auth, subscription checks, and proxying.</p>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Resilient Event Fabric</span>
+                <span class="badge badge-green">Kafka + RabbitMQ</span>
+              </div>
+              <p>Kafka powers massive asynchronous usage stream analytics, while RabbitMQ coordinates resilient inter-service RPC verification, tasks, and notifications.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Primary Actors & Use Cases -->
+        <section id="primary-actors">
+          <h2>2. Primary Actors & Core Use Cases</h2>
+          <div class="grid-3">
+            <div class="card">
+              <h3>API Provider</h3>
+              <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                <li>Registers organization and provider profile.</li>
+                <li>Publishes APIs with versions, endpoints, and OpenAPI specs.</li>
+                <li>Configures backend upstream URLs &amp; authentication secrets.</li>
+                <li>Defines subscription tiers (Free, Pro, Enterprise) and pricing.</li>
+                <li>Monitors consumer adoption, request volumes, and earnings.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>API Consumer</h3>
+              <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                <li>Discovers and searches published APIs by category.</li>
+                <li>Creates consumer applications (e.g., Development, Production).</li>
+                <li>Subscribes applications to API plans.</li>
+                <li>Generates, rotates, and revokes dual-hashed API credentials.</li>
+                <li>Consumes third-party APIs through API Circle's unified gateway.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Platform Administrator</h3>
+              <ul style="margin-top: 0.5rem; font-size: 0.9rem;">
+                <li>Manages organizations, users, and marketplace moderation.</li>
+                <li>Monitors platform-wide traffic, error rates, and node health.</li>
+                <li>Enforces platform-wide security policies and WAF directives.</li>
+                <li>Audits billing settlements and provider payout reconciliation.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="diagram-container">
+            <div class="mermaid">
+graph LR
+    subgraph Providers["API Providers"]
+        P1["Publish APIs & Versions"]
+        P2["Configure Upstream URLs & Auth"]
+        P3["Define Subscription Plans"]
+    end
+
+    subgraph Platform["API Circle Platform"]
+        NGX["NGINX Edge Proxy / Load Balancer"]
+        APIGW["Application API Gateway (Express / Node.js)"]
+        SVCS["Microservices (Catalog, Auth, User, Subscriptions)"]
+        MSG["Dual Messaging: Kafka (Streams) & RabbitMQ (RPC / Tasks)"]
+        DATA["PostgreSQL (Source of Truth) & Redis (Cache)"]
+    end
+
+    subgraph Consumers["API Consumers"]
+        C1["Discover in React Marketplace"]
+        C2["Subscribe Apps & Generate Keys"]
+        C3["Invoke APIs (HTTP / JSON)"]
+    end
+
+    subgraph Backends["Third-Party Upstream APIs"]
+        U1["Payment APIs (Stripe, etc.)"]
+        U2["Communication APIs (Twilio, etc.)"]
+        U3["Proprietary Enterprise Backends"]
+    end
+
+    P1 & P2 & P3 -->|Control Plane REST| SVCS
+    C1 & C2 -->|Portal REST| SVCS
+    C3 -->|API Traffic Port 80/443| NGX
+    NGX -->|Forward Traffic| APIGW
+    APIGW <-->|Hot Metadata & Rate Limiting| DATA
+    APIGW -->|Proxy with Injected Auth| U1 & U2 & U3
+    APIGW -.->|Usage Stream Events| MSG
+    SVCS <-->|Transactional Data| DATA
+    SVCS <-->|Inter-Service RPC & Tasks| MSG
+            </div>
+            <div class="diagram-caption">Figure 1.1: Core Actors and Architectural Interactions</div>
+          </div>
+        </section>
+
+        <!-- 3. Architecture & Gateway Layering -->
+        <section id="system-architecture">
+          <h2>3. Architecture & Two-Tier Gateway Layering</h2>
+          <p>
+            API Circle implements a distinct <strong>Two-Tier Gateway Architecture</strong> to cleanly separate edge infrastructure concerns from application-level API management business logic:
+          </p>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Tier 1: Edge NGINX Proxy</span>
+                <span class="badge badge-blue">Edge Traffic Control</span>
+              </div>
+              <p>NGINX operates as the internet-facing reverse proxy (Ports 80 &amp; 443). Responsibilities include:</p>
+              <ul style="font-size: 0.88rem; margin-top: 0.5rem;">
+                <li><strong>TLS/SSL Termination:</strong> Offloads cryptographic computation from Node.js runtime.</li>
+                <li><strong>Coarse Rate Limiting:</strong> <code>limit_req_zone</code> to deflect L7 HTTP flood DDoS attacks before hitting Node.js.</li>
+                <li><strong>High-Speed Load Balancing:</strong> Distributes incoming traffic across stateless <code>api-gateway</code> container replicas.</li>
+                <li><strong>Security Headers &amp; Buffering:</strong> HSTS, body size enforcement, client connection reuse (HTTP 1.1 keep-alive).</li>
+              </ul>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Tier 2: Application API Gateway</span>
+                <span class="badge badge-teal">Node.js / Express</span>
+              </div>
+              <p>Our dedicated Express-based API Gateway service executes all business-specific API mediation tasks:</p>
+              <ul style="font-size: 0.88rem; margin-top: 0.5rem;">
+                <li><strong>Credential Authentication:</strong> Extracts API key, verifies SHA-256 hash in Redis cache.</li>
+                <li><strong>Subscription &amp; Entitlement Validation:</strong> Verifies consumer subscription state and API product bindings.</li>
+                <li><strong>Distributed Rate Limiting:</strong> Executes atomic Redis Token Bucket Lua script.</li>
+                <li><strong>Quota Enforcement:</strong> Validates monthly consumed call limits.</li>
+                <li><strong>Provider Proxying:</strong> Injects provider authentication secrets and streams responses.</li>
+                <li><strong>Asynchronous Telemetry:</strong> Emits invocation logs to Kafka.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="diagram-container">
+            <div class="mermaid">
+flowchart TD
+    Client(["API Consumers / Client Apps"]) -->|HTTPS Traffic| NGINX["Tier 1: NGINX (TLS, L7 DDoS, Load Balancing)"]
+
+    subgraph DataPlane["Data Plane (High-Throughput / Non-Blocking)"]
+        NGINX -->|HTTP/1.1 Upstream| GW1["api-gateway Instance 1 (Node.js)"]
+        NGINX -->|HTTP/1.1 Upstream| GW2["api-gateway Instance 2 (Node.js)"]
+        NGINX -->|HTTP/1.1 Upstream| GWN["api-gateway Instance N (Node.js)"]
+        
+        GW1 & GW2 & GWN <-->|Sub-millisecond State & Token Bucket Lua| REDIS[("Redis 7 (Hot Routes, Keys, Quotas)")]
+    end
+
+    GW1 & GW2 & GWN -->|Proxy with Injected Provider Auth| Upstreams["Third-Party Provider Endpoints"]
+
+    GW1 & GW2 & GWN -.->|Async Usage Logs| KAFKA["Apache Kafka (api.usage.events)"]
+
+    subgraph ControlPlane["Control Plane (PERN Stack Microservices)"]
+        UI["React Web Application"] -->|REST APIs| MGMT_NGX["NGINX Admin/Portal Ingress"]
+        MGMT_NGX --> AUTH_SVC["auth-service (Node.js / Express)"]
+        MGMT_NGX --> USER_SVC["user-service (Node.js / Express)"]
+        MGMT_NGX --> CAT_SVC["api-catalog-service (Node.js / Express)"]
+        MGMT_NGX --> SUB_SVC["subscription-service (Node.js / Express)"]
+        MGMT_NGX --> KEY_SVC["api-key-service (Node.js / Express)"]
+        MGMT_NGX --> NOTIF_SVC["notification-service (Node.js / Express)"]
+        MGMT_NGX --> ANALYTICS_SVC["analytics-service (Node.js / Express)"]
+
+        AUTH_SVC & USER_SVC & CAT_SVC & SUB_SVC & KEY_SVC & NOTIF_SVC & ANALYTICS_SVC --> PG[("PostgreSQL 16 (Logical Schemas per Service)")]
+        
+        USER_SVC <-->|RPC Validation (api-key.validate)| RABBITMQ["RabbitMQ Broker (Queues & Direct Exchanges)"]
+        KEY_SVC <-->|RPC Validation Consumer| RABBITMQ
+        SUB_SVC -.->|Publish Key Invalidation| REDIS
+        NOTIF_SVC <-->|Task Queues (email.dispatch)| RABBITMQ
+    end
+
+    KAFKA -.->|Stream Ingestion| ANALYTICS_SVC
+            </div>
+            <div class="diagram-caption">Figure 1.2: End-to-End System Topology with Two-Tier Gateway</div>
+          </div>
+        </section>
+
+        <!-- 4. Technology Stack -->
+        <section id="tech-stack">
+          <h2>4. Technology Stack (PERN Architecture)</h2>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Layer</th>
+                  <th>Technology</th>
+                  <th>Role in API Circle</th>
+                  <th>Key Architectural Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Edge Proxy</strong></td>
+                  <td>NGINX 1.27 (Alpine)</td>
+                  <td>Edge ingress, TLS termination, IP rate limiting, HTTP load balancing</td>
+                  <td>C-based event loop handles high-concurrency connection pooling and absorbs DDoS floods before Node.js.</td>
+                </tr>
+                <tr>
+                  <td><strong>App API Gateway</strong></td>
+                  <td>Node.js 22 + Express 4.x</td>
+                  <td>Dedicated API Gateway handling token auth, quota, Redis rate limiting, upstream proxying</td>
+                  <td>Lightweight, fast non-blocking I/O, unified JavaScript codebase with rest of backend microservices.</td>
+                </tr>
+                <tr>
+                  <td><strong>Backend Microservices</strong></td>
+                  <td>Node.js 22 + Express.js</td>
+                  <td>RESTful domain microservices (Auth, Users, Catalog, Subscriptions, Keys, Notifications)</td>
+                  <td>Consistent PERN runtime, fast iteration, native JSON support, rich npm ecosystem (<code>pg</code>, <code>ioredis</code>, <code>amqplib</code>, <code>kafkajs</code>).</td>
+                </tr>
+                <tr>
+                  <td><strong>Frontend UI</strong></td>
+                  <td>React 18+ (SPA)</td>
+                  <td>Marketplace portal, Provider dashboard, API console, Admin control panel</td>
+                  <td>Component-driven UI, responsive state management, rich charting libraries for analytics dashboards.</td>
+                </tr>
+                <tr>
+                  <td><strong>Primary Database</strong></td>
+                  <td>PostgreSQL 16 (Alpine)</td>
+                  <td>Single source of truth for all transactional data</td>
+                  <td>Strict ACID compliance, JSONB schema support, isolated logical schemas per microservice, row-level locking.</td>
+                </tr>
+                <tr>
+                  <td><strong>In-Memory Cache &amp; State</strong></td>
+                  <td>Redis 7 (Alpine)</td>
+                  <td>API key metadata lookup, atomic Token Bucket rate limiting, session caching</td>
+                  <td>Sub-millisecond read latency, atomic Lua scripting support, native key TTL expiration.</td>
+                </tr>
+                <tr>
+                  <td><strong>Event Streaming Broker</strong></td>
+                  <td>Apache Kafka 3.8</td>
+                  <td>High-throughput asynchronous usage metering and analytics telemetry</td>
+                  <td>Partitioned append log with disk persistence, high write throughput (100k+ events/sec), consumer group scalability.</td>
+                </tr>
+                <tr>
+                  <td><strong>Task / RPC Broker</strong></td>
+                  <td>RabbitMQ 3.x (Management)</td>
+                  <td>Direct inter-service RPC validation, notification queues, task dispatch</td>
+                  <td>Low-latency AMQP RPC correlation, explicit ack/nack guarantees, dead-letter exchanges for resilient workers.</td>
+                </tr>
+                <tr>
+                  <td><strong>Containerization</strong></td>
+                  <td>Docker &amp; Docker Compose</td>
+                  <td>Multi-service container orchestration for local dev &amp; production deployments</td>
+                  <td>Predictable container environments, unified networking via bridge networks, health checks.</td>
+                </tr>
+                <tr>
+                  <td><strong>CI / CD</strong></td>
+                  <td>GitHub Actions &amp; GitLab CI</td>
+                  <td>Automated linting, testing, Docker image building, and multi-stage deployment</td>
+                  <td>Automated testing pipelines with PostgreSQL/Redis service containers, semantic versioning, registry pushes.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 5. Microservices Decomposition -->
+        <section id="service-decomposition">
+          <h2>5. Microservices Decomposition & Service Ownership</h2>
+          <p>
+            API Circle adheres to the <strong>Database-per-Service</strong> pattern. Services never share database connections or execute cross-schema JOINs. Instead, they interact via clean <strong>REST APIs</strong> and <strong>asynchronous message queues</strong>.
+          </p>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Microservice</th>
+                  <th>Port</th>
+                  <th>Primary Responsibility</th>
+                  <th>Database Schema</th>
+                  <th>Inter-Service Communication</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>api-gateway</strong></td>
+                  <td>3000</td>
+                  <td>Data Plane: Validates credentials, executes rate limit Lua, checks quotas, proxies to provider upstreams, emits usage metrics.</td>
+                  <td>Redis only (Cache &amp; State)</td>
+                  <td>Reads Redis; Emits to Kafka topic <code>api.usage.events</code></td>
+                </tr>
+                <tr>
+                  <td><strong>auth-service</strong></td>
+                  <td>3001</td>
+                  <td>Control Plane: User authentication, password hashing (bcrypt), JWT generation, RBAC roles &amp; permissions, password resets.</td>
+                  <td><code>auth</code></td>
+                  <td>REST endpoints; Redis session cache</td>
+                </tr>
+                <tr>
+                  <td><strong>user-service</strong></td>
+                  <td>3002</td>
+                  <td>Control Plane: User profiles, provider profiles, consumer profiles, organizations, and team memberships.</td>
+                  <td><code>users</code></td>
+                  <td>REST endpoints; RabbitMQ client to validate API keys (<code>api-key.validate</code>)</td>
+                </tr>
+                <tr>
+                  <td><strong>api-catalog-service</strong></td>
+                  <td>3004</td>
+                  <td>Control Plane: API registration, versions, endpoint definitions, OpenAPI documentation, categories, provider upstream configs.</td>
+                  <td><code>catalog</code></td>
+                  <td>REST endpoints; Publishes route invalidation to Redis</td>
+                </tr>
+                <tr>
+                  <td><strong>subscription-service</strong></td>
+                  <td>3007</td>
+                  <td>Control Plane: Subscription plans (Free, Pro, Enterprise), pricing, consumer subscriptions, usage quota periods.</td>
+                  <td><code>subscriptions</code></td>
+                  <td>REST endpoints; Updates subscription state in Redis</td>
+                </tr>
+                <tr>
+                  <td><strong>api-key-service</strong></td>
+                  <td>3008</td>
+                  <td>Control Plane: API key generation, prefix/hash storage, rotation, revocation, RabbitMQ RPC validation consumer.</td>
+                  <td><code>api_keys</code></td>
+                  <td>REST; Consumes RabbitMQ queue <code>api-key.validate</code>; writes to Redis</td>
+                </tr>
+                <tr>
+                  <td><strong>notification-service</strong></td>
+                  <td>3006</td>
+                  <td>Async Worker: Email templates, delivery tracking, quota alert notifications (80% / 100%), retry queue.</td>
+                  <td><code>notifications</code></td>
+                  <td>REST; Consumes RabbitMQ queue <code>notification.dispatch</code></td>
+                </tr>
+                <tr>
+                  <td><strong>analytics-service</strong></td>
+                  <td>3005</td>
+                  <td>Analytics: Aggregates usage metrics, latency quantiles, error rates for providers and consumers.</td>
+                  <td><code>analytics</code> / Redis</td>
+                  <td>Consumes Kafka topic <code>api.usage.events</code>; REST queries</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 6. Database & Redis Strategy -->
+        <section id="database-caching">
+          <h2>6. Database &amp; Redis Caching Strategy</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h3>PostgreSQL: Single Source of Truth</h3>
+              <p>
+                All durable platform state resides in a single PostgreSQL 16 cluster, partitioned into <strong>isolated logical schemas</strong>:
+              </p>
+              <ul style="font-size: 0.88rem; margin-top: 0.5rem;">
+                <li><code>auth.*</code>: Credentials, password hashes, roles, permissions, refresh tokens.</li>
+                <li><code>users.*</code>: Extended profiles, organizations, members, account settings.</li>
+                <li><code>catalog.*</code>: APIs, categories, versions, endpoints, documentation, provider auth.</li>
+                <li><code>subscriptions.*</code>: Plans, active consumer subscriptions, usage quota periods.</li>
+                <li><code>api_keys.*</code>: SHA-256 hashed API keys, key prefix index, usage logs.</li>
+                <li><code>notifications.*</code>: Templates, delivery attempts, user preferences.</li>
+              </ul>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem;">
+                Cross-service entity linkages use standard <strong>UUIDv4 identifiers without cross-schema foreign keys</strong>, ensuring microservices can migrate to independent physical databases seamlessly as traffic scales.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Redis: High-Performance Hot Cache</h3>
+              <p>
+                The Data Plane (API Gateway) avoids querying PostgreSQL on active request paths. Redis provides sub-millisecond lookups via prefixed namespaces:
+              </p>
+              <ul style="font-size: 0.88rem; margin-top: 0.5rem;">
+                <li><code>apikey:hash:&lt;sha256&gt;</code>: Cached key metadata, status, plan ID, rate limits (TTL: 300s).</li>
+                <li><code>catalog:route:&lt;slug&gt;:&lt;ver&gt;</code>: Upstream provider base URL and auth configs (TTL: 600s).</li>
+                <li><code>ratelimit:tb:&lt;subId&gt;</code>: Atomic Token Bucket state (tokens count + timestamp).</li>
+                <li><code>sub:quota:&lt;subId&gt;:&lt;YYYY-MM&gt;</code>: Monthly call counter for quota enforcement.</li>
+                <li><code>auth:blacklist:&lt;tokenHash&gt;</code>: Revoked JWT / refresh token blacklist.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. Messaging Architecture -->
+        <section id="messaging-architecture">
+          <h2>7. Dual Messaging Architecture: Kafka vs. RabbitMQ</h2>
+          <p>
+            Rather than forcing a single messaging tool to handle incompatible workloads, API Circle employs a <strong>Dual Messaging Strategy</strong> leveraging the distinct strengths of both Apache Kafka and RabbitMQ:
+          </p>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Messaging System</th>
+                  <th>Primary Use Case in API Circle</th>
+                  <th>Communication Pattern</th>
+                  <th>Why This Broker?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Apache Kafka</strong></td>
+                  <td>Data Plane telemetry, raw API usage metering, high-volume analytics ingestion</td>
+                  <td>Partitioned Pub/Sub streaming append-log</td>
+                  <td>
+                    <strong>High Ingestion Throughput:</strong> The Gateway emits an event for every single API invocation (thousands of events/sec). Kafka handles high-concurrency writes with sequential disk append and supports independent replayable consumer groups without impacting gateway latency.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>RabbitMQ</strong></td>
+                  <td>Inter-service RPC validation, task queues, transactional email and alert dispatching</td>
+                  <td>Direct/Topic Exchange with RPC Request-Reply (Correlation IDs)</td>
+                  <td>
+                    <strong>Flexible Task Routing &amp; Immediate Acknowledgment:</strong> Ideal for request-reply workflows (e.g., <code>user-service</code> verifying API key validity via <code>api-key-service</code> over <code>api-key.validate</code>) and durable worker task queues with dead-letter exchanges (DLX) for failed email retries.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram-container">
+            <div class="mermaid">
+flowchart LR
+    subgraph DataPlane["Data Plane Traffic"]
+        GW["api-gateway (Node.js)"]
+    end
+
+    subgraph KafkaBroker["Apache Kafka (Streaming Fabric)"]
+        TOPIC_USAGE["Topic: api.usage.events (Partitioned by App ID)"]
+    end
+
+    subgraph RabbitBroker["RabbitMQ (Task & RPC Fabric)"]
+        Q_VALIDATE["Queue: api-key.validate (Direct RPC)"]
+        Q_NOTIF["Queue: notification.dispatch (Task Queue)"]
+        Q_DLX["Dead Letter Exchange / Retry Queue"]
+    end
+
+    subgraph Consumers["Downstream Consumers"]
+        ANALYTICS["analytics-service"]
+        KEY_SVC["api-key-service"]
+        USER_SVC["user-service"]
+        NOTIF_SVC["notification-service"]
+    end
+
+    GW -.->|1. Fire-and-Forget Usage Events| TOPIC_USAGE
+    TOPIC_USAGE -->|2. Batch Stream Ingestion| ANALYTICS
+
+    USER_SVC -->|RPC Request (CorrID + ReplyTo)| Q_VALIDATE
+    Q_VALIDATE --> KEY_SVC
+    KEY_SVC -->|RPC Response (Valid: true/false)| USER_SVC
+
+    GW & KEY_SVC & SUB_SVC -.->|Push Alert Task| Q_NOTIF
+    Q_NOTIF --> NOTIF_SVC
+    NOTIF_SVC -.->|On Max Retries Failed| Q_DLX
+            </div>
+            <div class="diagram-caption">Figure 1.3: Dual Messaging Strategy (Kafka Streams + RabbitMQ RPC/Tasks)</div>
+          </div>
+        </section>
+
+        <!-- 8. End-to-End Request Pipeline -->
+        <section id="core-request-flow">
+          <h2>8. End-to-End Request Processing Pipeline</h2>
+          <p>
+            When an external client invokes an API, the request transitions seamlessly across NGINX, the Express API Gateway, Redis, and the upstream provider:
+          </p>
+
+          <div class="diagram-container">
+            <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Client as API Consumer
+    participant Nginx as Edge NGINX (Port 80/443)
+    participant GW as api-gateway (Express / Node.js)
+    participant Redis as Redis 7 (In-Memory State)
+    participant Provider as Provider Backend API
+    participant Kafka as Apache Kafka
+
+    Client->>Nginx: HTTPS GET /weather/v1/forecast (Header: x-api-circle-key)
+    Note over Nginx: Edge TLS termination, IP rate-limit check, forward to gateway
+    Nginx->>GW: HTTP GET /weather/v1/forecast (X-Forwarded-For: 203.0.113.19)
+
+    rect rgb(240, 249, 255)
+        note over GW, Redis: Fast Path Authentication & Rate Limiting
+        GW->>Redis: HGET / GET apikey:hash:{sha256}
+        Redis-->>GW: Cached: AppID, OrgID, PlanID, Rate=50, Burst=100
+        GW->>Redis: EVALSHA token_bucket.lua (ratelimit:tb:{subId}, quota:monthly:{subId})
+        Redis-->>GW: [Allowed=1, RemainingTokens=48, ResetSec=1, QuotaUsed=145]
+    end
+
+    rect rgb(240, 253, 244)
+        note over GW, Provider: Upstream Proxying & Authentication Injection
+        GW->>Redis: GET catalog:route:weather:v1
+        Redis-->>GW: Target: https://api.weathercorp.com/v1, Auth: Bearer {encrypted_secret}
+        GW->>Provider: Forward Request + Injected Provider Secret
+        Provider-->>GW: HTTP 200 OK + JSON Forecast Payload
+    end
+
+    GW-->>Nginx: HTTP 200 OK (X-RateLimit-Remaining: 48, X-Quota-Used: 145)
+    Nginx-->>Client: Stream Response to Consumer
+
+    rect rgb(255, 251, 235)
+        note over GW, Kafka: Asynchronous Event Emission (Non-Blocking)
+        GW-)Kafka: send(api.usage.events, {appId, apiId, status: 200, latencyMs: 142})
+    end
+            </div>
+            <div class="diagram-caption">Figure 1.4: 13-Step Low-Latency Request Processing Flow</div>
+          </div>
+        </section>
+
+        <!-- 9. Security Architecture -->
+        <section id="security-architecture">
+          <h2>9. Security Architecture</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h3>1. Dual-Token API Key Pattern</h3>
+              <p>To eliminate database exposure while retaining administrative indexability, credentials follow a dual-token structure:</p>
+              <code>ac_live_8f3d1b2a_984f10a8b9e6712c40...</code>
+              <ul style="margin-top: 0.75rem; font-size: 0.88rem;">
+                <li><strong>Public Prefix (<code>ac_live_8f3d1b2a</code>):</strong> Stored plaintext for administrative search and UI display.</li>
+                <li><strong>Secret Hash:</strong> Computed via <strong>SHA-256</strong>. Plaintext keys are presented exactly once upon creation and NEVER persisted.</li>
+                <li><strong>Instant Revocation:</strong> Revoking a key writes a tombstone into Redis with immediate TTL eviction.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>2. Secure Provider Credential Storage</h3>
+              <p>Provider backends often require private API keys, Basic Auth, or OAuth bearer tokens. These credentials are protected via:</p>
+              <ul style="margin-top: 0.75rem; font-size: 0.88rem;">
+                <li><strong>AES-256-GCM Encryption:</strong> Encrypted at rest in <code>catalog.provider_endpoints</code> with 128-bit authentication tags.</li>
+                <li><strong>Master Key Management:</strong> Secret keys provided via Docker/Kubernetes environment secrets.</li>
+                <li><strong>SSRF Prevention:</strong> Gateway validates provider target URLs against strict protocol (HTTPS only) and hostname allow-lists.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- 10. Docker & CI/CD Pipeline -->
+        <section id="deployment-cicd">
+          <h2>10. Containerization &amp; CI/CD Pipeline (GitHub Actions &amp; GitLab CI)</h2>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Docker Orchestration</span>
+                <span class="badge badge-blue">Containerized</span>
+              </div>
+              <p style="font-size: 0.88rem;">
+                Each microservice is packaged as an optimized multi-stage Node.js Alpine container (<code>node:22-alpine</code>). <code>docker-compose.yaml</code> orchestrates local development and multi-container staging:
+              </p>
+              <ul style="font-size: 0.85rem; margin-top: 0.5rem;">
+                <li>Isolated bridge network: <code>api-network</code>.</li>
+                <li>Explicit health checks for PostgreSQL, Redis, RabbitMQ, and Kafka.</li>
+                <li>Stateless microservices restart automatically on failure.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">CI / CD Automation</span>
+                <span class="badge badge-green">GitHub Actions &amp; GitLab CI</span>
+              </div>
+              <p style="font-size: 0.88rem;">
+                Automated pipelines trigger on pull requests and branch merges across both GitHub Actions and GitLab CI:
+              </p>
+              <ul style="font-size: 0.85rem; margin-top: 0.5rem;">
+                <li><strong>Stage 1 (Lint &amp; Test):</strong> Runs ESLint, Unit tests, and database migration checks using service containers.</li>
+                <li><strong>Stage 2 (Security Scan):</strong> Executes npm audit and container vulnerability scanning (Trivy).</li>
+                <li><strong>Stage 3 (Build &amp; Push):</strong> Builds multi-arch Docker images, tagging with Git SHA and pushing to Container Registry.</li>
+                <li><strong>Stage 4 (Deploy):</strong> Rolling update to staging and production Kubernetes/Docker Swarm clusters.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div style="margin-top: 3rem; text-align: center;">
+            <p style="color: var(--text-muted); font-size: 0.95rem;">
+              Proceed to the companion Low-Level Design document for the complete Node.js Express middleware implementations, SQL DDL, Redis Lua scripts, and CI/CD configuration files.
+            </p>
+            <a href="./lld.html" class="nav-link active" style="display: inline-flex; padding: 0.75rem 1.75rem; font-size: 1rem; margin-top: 0.5rem;">
+              Explore the Low-Level Design (LLD) &rarr;
+            </a>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <a href="#" class="back-to-top" title="Back to top">&uarr;</a>
+</body>
+</html>

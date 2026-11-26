@@ -45,6 +45,33 @@ const ProviderProfile = {
     return rows[0] || null;
   },
 
+  async upsert(userId, fields) {
+    const allowed = ['company_name', 'company_website', 'company_logo_url', 'description', 'support_email', 'support_url'];
+    const cols = ['user_id'];
+    const placeholders = ['$1'];
+    const updates = ['deleted_at = NULL', 'updated_at = NOW()'];
+    const values = [userId];
+    let idx = 2;
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (allowed.includes(key) && value !== undefined) {
+        cols.push(key);
+        placeholders.push(`$${idx++}`);
+        values.push(value);
+        updates.push(`${key} = EXCLUDED.${key}`);
+      }
+    }
+
+    const { rows } = await query(
+      `INSERT INTO users.provider_profiles (${cols.join(', ')})
+       VALUES (${placeholders.join(', ')})
+       ON CONFLICT (user_id) DO UPDATE SET ${updates.join(', ')}
+       RETURNING *`,
+      values
+    );
+    return rows[0];
+  },
+
   async verify(userId) {
     const { rows } = await query(
       `UPDATE users.provider_profiles
