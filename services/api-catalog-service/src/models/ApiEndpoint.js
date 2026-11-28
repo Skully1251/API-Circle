@@ -3,7 +3,18 @@
 const { query } = require('../config/db');
 
 const ApiEndpoint = {
-  async create({ apiVersionId, path, method, summary, description, requestBodySchema, responseSchema, queryParameters, pathParameters, headers }) {
+  async create({
+    apiVersionId,
+    path,
+    method,
+    summary,
+    description,
+    requestBodySchema,
+    responseSchema,
+    queryParameters,
+    pathParameters,
+    headers,
+  }) {
     const { rows } = await query(
       `INSERT INTO catalog.api_endpoints
          (api_version_id, path, method, summary, description,
@@ -11,7 +22,11 @@ const ApiEndpoint = {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
-        apiVersionId, path, method.toUpperCase(), summary || null, description || null,
+        apiVersionId,
+        path,
+        method.toUpperCase(),
+        summary || null,
+        description || null,
         requestBodySchema ? JSON.stringify(requestBodySchema) : null,
         responseSchema ? JSON.stringify(responseSchema) : null,
         queryParameters ? JSON.stringify(queryParameters) : null,
@@ -30,21 +45,44 @@ const ApiEndpoint = {
     return rows;
   },
 
+  async findByApi(apiId) {
+    const { rows } = await query(
+      `SELECT e.*, v.version AS api_version
+       FROM catalog.api_endpoints e
+       JOIN catalog.api_versions v ON v.id = e.api_version_id
+       WHERE v.api_id = $1
+       ORDER BY v.is_default DESC, e.path, e.method`,
+      [apiId]
+    );
+    return rows;
+  },
+
   async findById(id) {
     const { rows } = await query('SELECT * FROM catalog.api_endpoints WHERE id = $1', [id]);
     return rows[0] || null;
   },
 
   async update(id, fields) {
-    const allowed = ['path', 'method', 'summary', 'description', 'request_body_schema', 'response_schema', 'query_parameters', 'path_parameters', 'headers', 'is_deprecated'];
+    const allowed = [
+      'path',
+      'method',
+      'summary',
+      'description',
+      'request_body_schema',
+      'response_schema',
+      'query_parameters',
+      'path_parameters',
+      'headers',
+      'is_deprecated',
+    ];
     const sets = [];
     const values = [];
     let idx = 1;
 
     for (const [key, value] of Object.entries(fields)) {
       if (allowed.includes(key)) {
-        const val = (typeof value === 'object' && value !== null && !Array.isArray(value))
-          ? JSON.stringify(value) : value;
+        const val =
+          typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
         sets.push(`${key} = $${idx++}`);
         values.push(val);
       }

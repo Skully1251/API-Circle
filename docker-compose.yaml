@@ -34,6 +34,8 @@ services:
 
   api-gateway:
     build: ./services/api-gateway
+    ports:
+      - "3000:3000"
     expose:
       - "3000"
     environment:
@@ -122,6 +124,8 @@ services:
 
   admin-service:
     build: ./services/admin-service
+    ports:
+      - "3003:3003"
     expose:
       - "3003"
     environment:
@@ -132,6 +136,8 @@ services:
 
   api-catalog-service:
     build: ./services/api-catalog-service
+    ports:
+      - "3004:3004"
     expose:
       - "3004"
     environment:
@@ -142,6 +148,8 @@ services:
 
   analytics-service:
     build: ./services/analytics-service
+    ports:
+      - "3005:3005"
     expose:
       - "3005"
     environment:
@@ -152,6 +160,8 @@ services:
 
   notification-service:
     build: ./services/notification-service
+    ports:
+      - "3006:3006"
     expose:
       - "3006"
     environment:
@@ -162,6 +172,8 @@ services:
 
   subscription-service:
     build: ./services/subscription-service
+    ports:
+      - "3007:3007"
     expose:
       - "3007"
     environment:

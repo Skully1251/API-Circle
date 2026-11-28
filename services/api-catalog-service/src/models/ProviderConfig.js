@@ -3,18 +3,62 @@
 const { query } = require('../config/db');
 
 const ProviderConfig = {
-  async create({ apiId, authType, authConfig, rateLimitPerSecond, timeoutMs, retryCount, customHeaders }) {
+  async create({
+    apiId,
+    authType,
+    authConfig,
+    rateLimitPerSecond,
+    timeoutMs,
+    retryCount,
+    customHeaders,
+  }) {
     const { rows } = await query(
       `INSERT INTO catalog.provider_configs
          (api_id, auth_type, auth_config, rate_limit_per_second, timeout_ms, retry_count, custom_headers)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
-        apiId, authType,
+        apiId,
+        authType,
         JSON.stringify(authConfig || {}),
         rateLimitPerSecond || null,
         timeoutMs || 30000,
         retryCount || 0,
+        JSON.stringify(customHeaders || {}),
+      ]
+    );
+    return rows[0];
+  },
+
+  async upsert({
+    apiId,
+    authType,
+    authConfig,
+    rateLimitPerSecond,
+    timeoutMs,
+    retryCount,
+    customHeaders,
+  }) {
+    const { rows } = await query(
+      `INSERT INTO catalog.provider_configs
+         (api_id, auth_type, auth_config, rate_limit_per_second, timeout_ms, retry_count, custom_headers)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (api_id) DO UPDATE SET
+         auth_type = EXCLUDED.auth_type,
+         auth_config = EXCLUDED.auth_config,
+         rate_limit_per_second = EXCLUDED.rate_limit_per_second,
+         timeout_ms = EXCLUDED.timeout_ms,
+         retry_count = EXCLUDED.retry_count,
+         custom_headers = EXCLUDED.custom_headers,
+         updated_at = NOW()
+       RETURNING *`,
+      [
+        apiId,
+        authType,
+        JSON.stringify(authConfig || {}),
+        rateLimitPerSecond ?? null,
+        timeoutMs ?? 30000,
+        retryCount ?? 0,
         JSON.stringify(customHeaders || {}),
       ]
     );
@@ -30,14 +74,21 @@ const ProviderConfig = {
   },
 
   async update(apiId, fields) {
-    const allowed = ['auth_type', 'auth_config', 'rate_limit_per_second', 'timeout_ms', 'retry_count', 'custom_headers'];
+    const allowed = [
+      'auth_type',
+      'auth_config',
+      'rate_limit_per_second',
+      'timeout_ms',
+      'retry_count',
+      'custom_headers',
+    ];
     const sets = [];
     const values = [];
     let idx = 1;
 
     for (const [key, value] of Object.entries(fields)) {
       if (allowed.includes(key)) {
-        const val = (typeof value === 'object' && value !== null) ? JSON.stringify(value) : value;
+        const val = typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
         sets.push(`${key} = $${idx++}`);
         values.push(val);
       }
