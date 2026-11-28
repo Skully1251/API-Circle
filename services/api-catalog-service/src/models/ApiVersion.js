@@ -20,10 +20,18 @@ const ApiVersion = {
 
   async findByApi(apiId) {
     const { rows } = await query(
-      'SELECT * FROM catalog.api_versions WHERE api_id = $1 ORDER BY created_at DESC',
+      'SELECT * FROM catalog.api_versions WHERE api_id = $1 ORDER BY is_default DESC, created_at DESC',
       [apiId]
     );
     return rows;
+  },
+
+  async findByApiAndVersion(apiId, version) {
+    const { rows } = await query(
+      'SELECT * FROM catalog.api_versions WHERE api_id = $1 AND version = $2',
+      [apiId, version]
+    );
+    return rows[0] || null;
   },
 
   async findDefault(apiId) {
@@ -32,6 +40,20 @@ const ApiVersion = {
       [apiId]
     );
     return rows[0] || null;
+  },
+
+  async clearDefaultForApi(apiId, excludeVersionId = null) {
+    if (excludeVersionId) {
+      await query(
+        'UPDATE catalog.api_versions SET is_default = false, updated_at = NOW() WHERE api_id = $1 AND id <> $2 AND is_default = true',
+        [apiId, excludeVersionId]
+      );
+    } else {
+      await query(
+        'UPDATE catalog.api_versions SET is_default = false, updated_at = NOW() WHERE api_id = $1 AND is_default = true',
+        [apiId]
+      );
+    }
   },
 
   async update(id, fields) {

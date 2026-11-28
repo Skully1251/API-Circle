@@ -9,6 +9,7 @@ const MIGRATIONS_DIR = __dirname;
 async function migrate() {
   const client = await pool.connect();
   try {
+    await client.query('CREATE SCHEMA IF NOT EXISTS catalog');
     await client.query(`
       CREATE TABLE IF NOT EXISTS catalog.schema_migrations (
         id          SERIAL PRIMARY KEY,
